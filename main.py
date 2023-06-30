@@ -1,6 +1,3 @@
-# Импортирование библиотеки для работы с GCode
-from math import pi
-
 # Размеры куба (в мм)
 length = 10
 width = 10
@@ -40,11 +37,9 @@ for z in range(1, height + 1):
     write_command("G0 X0 Y0 Z%d ; new layer" % (z))
     # write_command("G0 X0 Y0")
 
-
 write_command("\n")
 
 # Завершение программы GCode
-write_command("G1 F200 E10")  # Подача материала (конец)
 write_command("M104 S0 ; Отключение обогревателя сопла")
 write_command("M140 S0 ; Отключение обогревателя стола")
 write_command("G92 E0 ; Сброс экструдера")

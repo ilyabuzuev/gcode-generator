@@ -1,3 +1,5 @@
+import math
+
 # Размеры куба (в мм)
 cubeLength = 10
 cubeWidth = 10
@@ -5,9 +7,9 @@ cubeHeight = 10
 
 # Настройки 3D-принтера
 extruderTemp = 230  # Температура экструдера
-bedTemp = 110  # Температура стола
+bedTemp = 130  # Температура стола
 layerHeight = 0.2 # Высота слоя
-extrudedMaterialWidth = 0.4 # Ширина выдавливаемого материала
+extruderSize = 0.4 # Ширина выдавливаемого материала
 
 # Открываем файл для записи GCode
 gcodeFile = open("cube-l%s-w%s-h%s.gcode" % (cubeLength, cubeWidth, cubeHeight), "w")
@@ -18,15 +20,21 @@ def calcLayerCount(cubeHeight, layerHeight):
 
 # Функция для вычисления начального X
 def calcX0(cubeWidth, extrudedMaterialWidth):
-    return (0 - cubeWidth) / 2 - extrudedMaterialWidth / 2
+    return 0
 
 # Функция для вычисления начального Y
 def calcY0(cubeLength, extrudedMaterialWidth):
-    return (0 - cubeLength) / 2 - extrudedMaterialWidth / 2
+    return 0
 
 # Функция для вычисления начального Z
 def calcZ0(layerHeight):
     return 0 + layerHeight
+
+def calcLayerLength(length, extruderSize):
+    return length / extruderSize
+
+def calcLayerWidth(width, extruderSize):
+    return width / extruderSize
 
 # Функция для записи команды в файл GCode
 def writeGcodeCommand(gcodeCommand):
@@ -40,12 +48,13 @@ def header():
     writeGcodeCommand("G162 X Y F2000") # Home XY axes maximum
     writeGcodeCommand("G161 Z F900") # Home Z axis minimum
     writeGcodeCommand("G92 X0 Y0 Z-5 A0 B0") # Set Z to -5
+    writeGcodeCommand("G1 Z0.0 F900") # move Z to '0'
     writeGcodeCommand("G161 Z F100") # Home Z axis minimum
     writeGcodeCommand("M132 X Y Z A B") # Recall stored home offsets for XYZAB axis
     writeGcodeCommand("G92 X152 Y72 Z0 A0 B0")
     writeGcodeCommand("G1 X-112 Y-73 Z150 F3300.0") # Move to waiting position
     writeGcodeCommand("G130 X20 Y20 A20 B20") # Lower stepper Vrefs while heating
-    writeGcodeCommand("M109 S110 T0")
+    writeGcodeCommand("M109 S130 T0")
     writeGcodeCommand("M134 T0")
     writeGcodeCommand("M135 T0")
     writeGcodeCommand("M104 S230 T0")
@@ -64,7 +73,7 @@ def header():
 # Завершение программы GCode
 def tail():
     writeGcodeCommand("; Footer")
-    writeGcodeCommand("G1 X3.827 Y4.114 Z10.970 F1500 A325.69237") # Retract
+    # writeGcodeCommand("G1 X3.827 Y4.114 Z10.970 F1500 A325.69237") # Retract
     writeGcodeCommand("M127 T0") # Fan off
     writeGcodeCommand("M18 A B") # Turn off A and B Steppers
     writeGcodeCommand("G1 Z155 F900")
@@ -77,37 +86,57 @@ def tail():
     writeGcodeCommand("M72 P1 ") # Play Ta-Da song
     writeGcodeCommand("M137") # Build end notification
 
-def generateCubeGcode(cubeLength, cubeWidth, cubeHeight):
+def generateCubeGcode(cubeLength, cubeWidth, cubeHeight, extruderSize):
     writeGcodeCommand("; Main")
 
     layers = int(calcLayerCount(cubeHeight, layerHeight))
+    length = int(calcLayerLength(cubeLength, extruderSize))
+    width = int(calcLayerWidth(cubeWidth, extruderSize))
 
-    # x0 = calcX0(cubeWidth, extrudedMaterialWidth)
-    # y0 = calcY0(cubeLength, extrudedMaterialWidth)
+    x0 = calcX0(cubeWidth, extruderSize)
+    y0 = calcY0(cubeLength, extruderSize)
     z0 = calcZ0(layerHeight)
 
     currentLayer = z0
 
-    for layer in range(layers):
-        for x in range(0, cubeWidth + 1):
-            writeGcodeCommand("G1 X%s Y%s Z%s ; Travel Move" % (x, 0, round(currentLayer, 1)))
-            writeGcodeCommand("G1 X%s Y%s Z%s" % (x, cubeLength, round(currentLayer, 1)))
+    currentX = x0
+    prevX = x0
+
+    currentY = y0
+    prevY = y0
+
+    currentA = 0
+
+    for layer in range(layers - (layers - 1)):
+    # for layer in range(layers):
+        for x in range(length + 1):
+            writeGcodeCommand("G1 X%s Y%s Z%s  F4600 ; Travel Move" % ("%.4f" % currentX, "%.4f" % 0, "%.4f" % currentLayer))
+            writeGcodeCommand("G1 X%s Y%s Z%s F4600 A%s" % ("%.4f" % currentX, "%.4f" % cubeLength, "%.4f" % currentLayer, "%.4f" % currentA))
+
+            prevX = currentX
+            currentX += extruderSize
+
+            # print("x2: %s., x1: %s., y2: %s., y2: %s." % (currentX, prevX, currentY, prevY))
+
+            offset = math.sqrt((currentX - prevX) ** 2 + (currentY - prevY) ** 2)
+            currentA += (offset - (offset / 4600))
 
         currentLayer += layerHeight
+        currentX = x0
 
-    # writeGcodeCommand("G1 X0 Y0")
-    # writeGcodeCommand("G1 X0 Y10")
-    # writeGcodeCommand("G1 X4 Y0")
-    # writeGcodeCommand("G1 X4 Y10")
-    # writeGcodeCommand("G1 X8 Y0")
-    # writeGcodeCommand("G1 X8 Y10")
-    # writeGcodeCommand("G1 X12 Y0")
-    # writeGcodeCommand("G1 X12 Y10")
-    # writeGcodeCommand("G1 X16 Y0")
-    # writeGcodeCommand("G1 X16 Y10")
+    # writeGcodeCommand("G1 X0 Y0 F4600")
+    # writeGcodeCommand("G1 X0 Y10 F4600 A1")
+    # writeGcodeCommand("G1 X4 Y0 F4600")
+    # writeGcodeCommand("G1 X4 Y10 F4600 A2")
+    # writeGcodeCommand("G1 X8 Y0 F4600")
+    # writeGcodeCommand("G1 X8 Y10 F4600 A3")
+    # writeGcodeCommand("G1 X12 Y0 F4600")
+    # writeGcodeCommand("G1 X12 Y10 F4600 A4")
+    # writeGcodeCommand("G1 X16 Y0 F4600")
+    # writeGcodeCommand("G1 X16 Y10 F4600 A5")
 
 header()
-generateCubeGcode(cubeLength, cubeWidth, cubeHeight)
+generateCubeGcode(cubeLength, cubeWidth, cubeHeight, extruderSize)
 tail()
 
 # Закрытие файла GCode
